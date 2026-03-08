@@ -67,6 +67,16 @@ def shell_join(parts: list[str]) -> str:
     return " ".join(shell_quote(part) for part in parts)
 
 
+def validate_string_list(field_name: str, value: object, *, required: bool = False) -> list[str]:
+    if value is None:
+        if required:
+            raise SystemExit(f"Missing required list field: {field_name}")
+        return []
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise SystemExit(f"Field {field_name!r} must be a list of strings.")
+    return value
+
+
 def load_config(path: Path) -> dict:
     with path.open() as handle:
         return json.load(handle)
@@ -148,39 +158,107 @@ def build_prompt(agent: dict, baseline: dict) -> str:
     )
 
 
-def build_copilot_command(agent: dict, prompt: str) -> list[str]:
-    model = agent["model"]
+def get_agent_harness(agent: dict) -> str:
+    return agent.get("harness", "copilot")
+
+
+def get_agent_model_display(agent: dict) -> str:
+    return agent.get("model", "default")
+
+
+def format_parts(parts: list[str], values: dict[str, str]) -> list[str]:
+    return [part.format(**values) for part in parts]
+
+
+def build_copilot_command(agent: dict, prompt: str, worktree_path: Path, log_path: Path) -> list[str]:
+    model = agent.get("model")
     max_continues = str(agent.get("max_autopilot_continues", 200))
-    return [
+    command = [
         "copilot",
         "--experimental",
         "--autopilot",
         "--allow-all",
         "--no-ask-user",
-        "--model",
-        model,
         "--max-autopilot-continues",
         max_continues,
-        "-p",
-        prompt,
     ]
+    if model:
+        command.extend(["--model", model])
+    values = {
+        "prompt": prompt,
+        "worktree": str(worktree_path),
+        "log_path": str(log_path),
+        "name": agent["name"],
+        "model": agent.get("model", ""),
+    }
+    command.extend(format_parts(validate_string_list("harness_args", agent.get("harness_args")), values))
+    command.extend(["-p", prompt])
+    return command
+
+
+def build_codex_command(agent: dict, prompt: str, worktree_path: Path, log_path: Path) -> list[str]:
+    model = agent.get("model")
+    command = [
+        "codex",
+        "exec",
+        "--full-auto",
+        "-C",
+        str(worktree_path),
+    ]
+    if model:
+        command.extend(["--model", model])
+    values = {
+        "prompt": prompt,
+        "worktree": str(worktree_path),
+        "log_path": str(log_path),
+        "name": agent["name"],
+        "model": agent.get("model", ""),
+    }
+    command.extend(format_parts(validate_string_list("harness_args", agent.get("harness_args")), values))
+    command.append(prompt)
+    return command
+
+
+def build_custom_command(agent: dict, prompt: str, worktree_path: Path, log_path: Path) -> list[str]:
+    command_template = validate_string_list("command", agent.get("command"), required=True)
+    values = {
+        "prompt": prompt,
+        "worktree": str(worktree_path),
+        "log_path": str(log_path),
+        "name": agent["name"],
+        "model": agent.get("model", ""),
+    }
+    return format_parts(command_template, values)
+
+
+def build_agent_command(agent: dict, prompt: str, worktree_path: Path, log_path: Path) -> list[str]:
+    harness = get_agent_harness(agent)
+    if harness == "copilot":
+        return build_copilot_command(agent, prompt, worktree_path, log_path)
+    if harness == "codex":
+        return build_codex_command(agent, prompt, worktree_path, log_path)
+    if harness == "custom":
+        return build_custom_command(agent, prompt, worktree_path, log_path)
+    raise SystemExit(f"Unsupported harness {harness!r}. Use 'copilot', 'codex', or 'custom'.")
 
 
 def build_window_command(agent: dict, worktree_path: Path, prompt: str, log_path: Path) -> str:
     agent_name = agent["name"]
-    model = agent["model"]
-    copilot_cmd = shell_join(build_copilot_command(agent, prompt))
+    harness = get_agent_harness(agent)
+    model = get_agent_model_display(agent)
+    harness_cmd = shell_join(build_agent_command(agent, prompt, worktree_path, log_path))
     return textwrap.dedent(
         f"""\
         set -euo pipefail
         cd {shell_quote(str(worktree_path))}
         mkdir -p {shell_quote(str(log_path.parent))}
         echo "agent: {agent_name}"
+        echo "harness: {harness}"
         echo "model: {model}"
         echo "worktree: {worktree_path}"
         echo "log: {log_path}"
         echo
-        {copilot_cmd} 2>&1 | tee -a {shell_quote(str(log_path))}
+        {harness_cmd} 2>&1 | tee -a {shell_quote(str(log_path))}
         status=${{PIPESTATUS[0]}}
         echo
         echo "agent exited with status $status"
@@ -221,7 +299,7 @@ def build_overview_text(session_name: str, plans: list[dict], worktree_root: Pat
     ]
     for plan in plans:
         lines.append(
-            f"- {plan['name']}: model={plan['model']} branch={plan['branch']} worktree={plan['worktree']}"
+            f"- {plan['name']}: harness={plan['harness']} model={plan['model']} branch={plan['branch']} worktree={plan['worktree']}"
         )
     lines.extend(
         [
@@ -276,7 +354,8 @@ def main() -> int:
         plans.append(
             {
                 "name": name,
-                "model": agent["model"],
+                "harness": get_agent_harness(agent),
+                "model": get_agent_model_display(agent),
                 "branch": branch,
                 "worktree": str(worktree),
                 "log_path": str(log_path),
@@ -293,6 +372,7 @@ def main() -> int:
         for plan in plans:
             print("---")
             print(f"agent={plan['name']}")
+            print(f"harness={plan['harness']}")
             print(f"model={plan['model']}")
             print(f"branch={plan['branch']}")
             print(f"worktree={plan['worktree']}")
