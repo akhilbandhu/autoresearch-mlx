@@ -1,0 +1,28 @@
+{
+  "run_tag": "mar8",
+  "session_name": "autoresearch-mar8",
+  "worktree_root": "../autoresearch-mlx-worktrees",
+  "base_ref": "HEAD",
+  "baseline": {
+    "val_bpb": 2.332789,
+    "memory_gb": 10.8,
+    "description": "M2 Pro 16 GB baseline (depth 4, eval batch 128)"
+  },
+  "agents": [
+    {
+      "name": "sonnet45",
+      "model": "claude-sonnet-4.5",
+      "extra_prompt": "Bias toward simple MLX-native optimizer or batch-size sweeps before more radical architecture changes."
+    },
+    {
+      "name": "gpt54",
+      "model": "gpt-5.4",
+      "extra_prompt": "Explore bolder train.py changes if simpler ideas stall, but keep the code understandable."
+    },
+    {
+      "name": "gemini",
+      "model": "gemini-3-pro-preview",
+      "extra_prompt": "Focus on throughput-oriented ideas for Apple Silicon, especially changes that might increase the number of optimizer steps in five minutes."
+    }
+  ]
+}

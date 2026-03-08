@@ -27,6 +27,43 @@ uv run train.py
 
 The checked-in defaults aim to fit 16 GB Apple Silicon Macs by keeping `FINAL_EVAL_BATCH_SIZE` conservative. If you have more unified memory and want faster evaluation, raise that value in `train.py`.
 
+## Multi-agent tmux launcher
+
+If you want to run several autoresearch agents in parallel and watch them live, use `scripts/launch_tmux_agents.py`. It creates one git worktree per agent under a sibling directory, initializes each worktree with your local baseline in `results.tsv`, and launches one tmux window per agent using Copilot CLI prompt mode with an explicit model.
+
+```bash
+# 1. Review and edit the example profile
+$EDITOR scripts/agents.example.json
+
+# 2. Preview the worktrees/session that would be created
+uv run python scripts/launch_tmux_agents.py --config scripts/agents.example.json --dry-run
+
+# 3. Launch the swarm
+uv run python scripts/launch_tmux_agents.py --config scripts/agents.example.json
+
+# 4. Attach to the tmux session
+tmux attach -t autoresearch-mar8
+```
+
+Notes:
+
+- Each agent gets its own branch/worktree, so commits and resets do not interfere.
+- The example profile mixes multiple models (`claude-sonnet-4.5`, `gpt-5.4`, `gemini-3-pro-preview`), but you can swap them freely.
+- Parallel agents consume premium requests quickly, so start with 2-3 agents and scale up once the workflow looks healthy.
+- If the base checkout is dirty, the launcher warns you and still branches from committed `HEAD`.
+- The current launcher uses Copilot CLI in each tmux window and changes the underlying LLM via `--model`; it is not yet mixing completely different agent binaries in one run.
+
+### How the multi-agent launcher works
+
+1. You define a run profile in `scripts/agents.example.json` with a `run_tag`, a shared local baseline, and a list of agents.
+2. For each agent, the launcher creates a separate git worktree and branch under a sibling directory such as `../autoresearch-mlx-worktrees/mar8/sonnet45/`.
+3. Each worktree gets your local baseline appended to its own `results.tsv`, so every agent compares against the same known-good run on your Mac.
+4. The launcher builds a prompt from `program.md`, the local baseline numbers, and each agent's `extra_prompt` so the agents can pursue slightly different research strategies.
+5. It starts a tmux session with an `overview` window plus one window per agent, making it easy to watch progress live.
+6. Inside each agent window, it runs Copilot CLI in prompt mode with autopilot enabled, for example: `copilot --experimental --autopilot --model gpt-5.4 -p "<prompt>"`.
+7. Each window also writes a persistent log file under `../autoresearch-mlx-worktrees/logs/<run_tag>/`, so you can inspect output without staying attached to tmux.
+8. Because each agent has its own branch and worktree, it can commit, amend, and reset independently without clobbering the others.
+
 ## How it works
 
 Same as the original. Three files that matter:
