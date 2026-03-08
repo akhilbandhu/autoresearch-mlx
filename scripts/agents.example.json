@@ -22,9 +22,10 @@
       "extra_prompt": "Explore bolder train.py changes if simpler ideas stall, but keep the code understandable."
     },
     {
-      "name": "codex",
-      "harness": "codex",
-      "extra_prompt": "Focus on throughput-oriented ideas for Apple Silicon, especially changes that might increase the number of optimizer steps in five minutes."
+      "name": "gemini3",
+      "harness": "copilot",
+      "model": "gemini-3-pro",
+      "extra_prompt": "Explore bolder train.py changes if simpler ideas stall, but keep the code understandable."
     }
   ]
 }
