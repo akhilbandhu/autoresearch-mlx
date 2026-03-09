@@ -33,6 +33,7 @@ DEFAULT_PROMPT_TEMPLATE = textwrap.dedent(
     - keep logging results to results.tsv
     - this machine is shared by multiple agent worktrees, so never run `uv run train.py` directly
     - for every experiment run, always use `uv run python scripts/run_train_with_lock.py > run.log 2>&1`
+    - do not pass `--lock-path` or otherwise create a per-agent lock; all agents on this machine must share the default global lock
     - continue experimenting until interrupted; do not stop to ask the human
 
     Guidance:

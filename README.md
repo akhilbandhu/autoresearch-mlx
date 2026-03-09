@@ -53,6 +53,7 @@ Notes:
 - For Copilot agents you can pick different underlying models (`claude-sonnet-4.5`, `gpt-5.4`, `gemini-3-pro-preview`, etc.).
 - For Codex agents you can either rely on your local default model or set `"model"` explicitly if your Codex setup supports it.
 - On a single Apple Silicon Mac, agents can think in parallel but training should be serialized; the launcher prompt now forces agents to use `scripts/run_train_with_lock.py`.
+- The shared lock is intentionally global. Do not pass custom `--lock-path` values from agent prompts unless you explicitly want to bypass serialization.
 - Parallel agents consume premium requests quickly, so start with 2-3 agents and scale up once the workflow looks healthy.
 - If the base checkout is dirty, the launcher warns you and still branches from committed `HEAD`.
 - Built-in harnesses are currently `copilot` and `codex`. If you want Claude CLI, Pi, or something else, use the `custom` harness with a command template.

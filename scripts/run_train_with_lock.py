@@ -9,6 +9,7 @@ import argparse
 import fcntl
 import json
 import os
+import shlex
 import socket
 import subprocess
 import sys
@@ -16,11 +17,14 @@ import time
 from pathlib import Path
 
 
+DEFAULT_LOCK_PATH = (Path.home() / ".cache" / "autoresearch" / "train.lock").resolve()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run train.py with a shared machine-wide lock.")
     parser.add_argument(
         "--lock-path",
-        default=str(Path.home() / ".cache" / "autoresearch" / "train.lock"),
+        default=str(DEFAULT_LOCK_PATH),
         help="Lock file path shared by all worktrees on this machine.",
     )
     parser.add_argument(
@@ -38,6 +42,17 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def validate_lock_path(lock_path: Path) -> None:
+    if lock_path == DEFAULT_LOCK_PATH:
+        return
+    if os.environ.get("AUTORESEARCH_ALLOW_CUSTOM_LOCK_PATH") == "1":
+        return
+    raise SystemExit(
+        "Custom lock paths are disabled by default so agents cannot bypass shared training serialization. "
+        "Use the default lock path, or set AUTORESEARCH_ALLOW_CUSTOM_LOCK_PATH=1 if you really need an override."
+    )
+
+
 def write_lock_info(info_path: Path, info: dict) -> None:
     info_path.parent.mkdir(parents=True, exist_ok=True)
     info_path.write_text(json.dumps(info, indent=2, sort_keys=True) + "\n")
@@ -52,10 +67,45 @@ def read_lock_info(info_path: Path) -> dict | None:
         return None
 
 
-def find_other_train_processes(repo_root: Path) -> list[tuple[int, str]]:
+def get_process_cwd(pid: int) -> str | None:
+    proc = subprocess.run(
+        ["lsof", "-a", "-d", "cwd", "-p", str(pid), "-Fn"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    for line in proc.stdout.splitlines():
+        if line.startswith("n"):
+            return line[1:]
+    return None
+
+
+def is_train_command(command: str) -> bool:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    if not tokens:
+        return False
+
+    token_names = [Path(token).name for token in tokens]
+    if "run_train_with_lock.py" in token_names:
+        return False
+    if "train.py" not in token_names:
+        return False
+
+    launcher_names = {"bash", "sh", "zsh", "node", "copilot"}
+    if Path(tokens[0]).name in launcher_names:
+        return False
+    return True
+
+
+def find_other_train_processes(repo_root: Path) -> list[tuple[int, str, str]]:
     current_pid = os.getpid()
     parent_pid = os.getppid()
-    repo_marker = str(repo_root)
+    repo_marker = repo_root.name
     proc = subprocess.run(
         ["ps", "-axo", "pid=,command="],
         text=True,
@@ -63,7 +113,7 @@ def find_other_train_processes(repo_root: Path) -> list[tuple[int, str]]:
         check=True,
     )
 
-    matches: list[tuple[int, str]] = []
+    matches: list[tuple[int, str, str]] = []
     for raw_line in proc.stdout.splitlines():
         line = raw_line.strip()
         if not line:
@@ -75,11 +125,12 @@ def find_other_train_processes(repo_root: Path) -> list[tuple[int, str]]:
         command = parts[1]
         if pid in {current_pid, parent_pid}:
             continue
-        if "train.py" not in command:
+        if not is_train_command(command):
             continue
-        if repo_marker not in command and "autoresearch-mlx" not in command:
+        cwd = get_process_cwd(pid)
+        if not cwd or repo_marker not in cwd:
             continue
-        matches.append((pid, command))
+        matches.append((pid, cwd, command))
     return matches
 
 
@@ -117,7 +168,7 @@ def wait_for_other_training(repo_root: Path, poll_seconds: float, status_interva
             return
         now = time.time()
         if now - last_status >= status_interval:
-            summary = ", ".join(f"{pid}:{command[:120]}" for pid, command in matches)
+            summary = ", ".join(f"{pid}@{cwd}:{command[:80]}" for pid, cwd, command in matches)
             print(
                 f"Lock acquired, but other train.py processes are still active; waiting: {summary}",
                 file=sys.stderr,
@@ -131,6 +182,7 @@ def main() -> int:
     args = parse_args()
     repo_root = Path(__file__).resolve().parent.parent
     lock_path = Path(args.lock_path).expanduser().resolve()
+    validate_lock_path(lock_path)
     info_path = lock_path.with_suffix(lock_path.suffix + ".json")
     cwd = Path.cwd().resolve()
 

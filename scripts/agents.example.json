@@ -22,9 +22,9 @@
       "extra_prompt": "Explore bolder train.py changes if simpler ideas stall, but keep the code understandable."
     },
     {
-      "name": "gemini3",
+      "name": "gpt53codex",
       "harness": "copilot",
-      "model": "gemini-3-pro",
+      "model": "gpt-5.3-codex",
       "extra_prompt": "Explore bolder train.py changes if simpler ideas stall, but keep the code understandable."
     }
   ]
