@@ -356,12 +356,12 @@ class AdamW:
 # ---------------------------------------------------------------------------
 
 # Model architecture
-ASPECT_RATIO = 64
+ASPECT_RATIO = 32
 HEAD_DIM = 128
 WINDOW_PATTERN = "SSSL"
 
 # v0.1: AdamW only. Muon port is future work.
-TOTAL_BATCH_SIZE = 2**16
+TOTAL_BATCH_SIZE = 2**13
 EMBEDDING_LR = 0.6
 UNEMBEDDING_LR = 0.004
 MATRIX_LR = 0.04
@@ -374,7 +374,7 @@ FINAL_LR_FRAC = 0.0
 
 # Model size
 DEPTH = 4
-DEVICE_BATCH_SIZE = 16
+DEVICE_BATCH_SIZE = 4
 # Keep eval memory conservative enough for 16 GB Apple Silicon Macs.
 FINAL_EVAL_BATCH_SIZE = 128
 STARTUP_EXCLUDE_STEPS = 1
