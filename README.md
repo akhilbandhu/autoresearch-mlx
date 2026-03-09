@@ -52,6 +52,7 @@ Notes:
 - The example profile shows mixed harnesses: Copilot CLI plus Codex CLI.
 - For Copilot agents you can pick different underlying models (`claude-sonnet-4.5`, `gpt-5.4`, `gemini-3-pro-preview`, etc.).
 - For Codex agents you can either rely on your local default model or set `"model"` explicitly if your Codex setup supports it.
+- On a single Apple Silicon Mac, agents can think in parallel but training should be serialized; the launcher prompt now forces agents to use `scripts/run_train_with_lock.py`.
 - Parallel agents consume premium requests quickly, so start with 2-3 agents and scale up once the workflow looks healthy.
 - If the base checkout is dirty, the launcher warns you and still branches from committed `HEAD`.
 - Built-in harnesses are currently `copilot` and `codex`. If you want Claude CLI, Pi, or something else, use the `custom` harness with a command template.
@@ -65,8 +66,9 @@ Notes:
 5. It starts a tmux session with an `overview` window plus one window per agent, making it easy to watch progress live.
 6. Inside each agent window, it runs the selected harness: for example `copilot --experimental --autopilot --model gpt-5.4 -p "<prompt>"` or `codex exec --full-auto "<prompt>"`.
 7. If you set `"harness": "custom"`, the launcher will run your own command template, so you can plug in other local CLIs such as Claude Code or Pi as long as they accept a prompt non-interactively.
-8. Each window also writes a persistent log file under `../autoresearch-mlx-worktrees/logs/<run_tag>/`, so you can inspect output without staying attached to tmux.
-9. Because each agent has its own branch and worktree, it can commit, amend, and reset independently without clobbering the others.
+8. When several agents share one Mac, they should launch experiments through `scripts/run_train_with_lock.py`, which waits for a machine-wide lock before starting `train.py`.
+9. Each window also writes a persistent log file under `../autoresearch-mlx-worktrees/logs/<run_tag>/`, so you can inspect output without staying attached to tmux.
+10. Because each agent has its own branch and worktree, it can commit, amend, and reset independently without clobbering the others.
 
 ### Harness configuration
 

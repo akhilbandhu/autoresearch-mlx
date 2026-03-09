@@ -18,7 +18,7 @@ COPILOT_TRAILER = "Co-authored-by: Copilot <223556219+Copilot@users.noreply.gith
 
 DEFAULT_PROMPT_TEMPLATE = textwrap.dedent(
     """\
-    Read @program.md, @README.md, @prepare.py, @train.py, and @results.tsv.
+    Read @program.md, @README.md, @prepare.py, @train.py, @results.tsv, and @scripts/run_train_with_lock.py.
     You are inside a dedicated git worktree and branch for this agent only.
     Follow @program.md closely and continue the autonomous experiment loop from here.
 
@@ -31,6 +31,8 @@ DEFAULT_PROMPT_TEMPLATE = textwrap.dedent(
     - commit, amend, and reset only inside this worktree/branch
     - do not touch sibling worktrees or the parent checkout
     - keep logging results to results.tsv
+    - this machine is shared by multiple agent worktrees, so never run `uv run train.py` directly
+    - for every experiment run, always use `uv run python scripts/run_train_with_lock.py > run.log 2>&1`
     - continue experimenting until interrupted; do not stop to ask the human
 
     Guidance:
@@ -38,6 +40,7 @@ DEFAULT_PROMPT_TEMPLATE = textwrap.dedent(
     - compare only against this machine's baseline and any later kept results in this branch
     - prefer simple MLX-native ideas before adding complexity
     - if an experiment crashes, debug briefly, then move on if the idea is bad
+    - reading, editing, and reasoning can happen in parallel across agents, but training must stay serialized
 
     Agent-specific focus:
     {extra_prompt}
